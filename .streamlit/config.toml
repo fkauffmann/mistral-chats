@@ -1,0 +1,16 @@
+[client]
+toolbarMode = "developer"
+#toolbarMode = "minimal"
+
+[server]
+enableCORS = false
+enableXsrfProtection = false
+headless = true
+
+[theme]
+base="light"
+primaryColor="#ff6e00"
+secondaryBackgroundColor="#fff6f0"
+textColor="#444444"
+baseFontSize=16
+showSidebarBorder=true

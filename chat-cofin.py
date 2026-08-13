@@ -1,5 +1,4 @@
 import datetime
-import time
 import re
 
 import streamlit as st
@@ -21,49 +20,40 @@ st.set_page_config(
 # CONSTANTS
 
 MODEL = "mistral-small-latest"
-MIN_TIME_BETWEEN_REQUESTS = datetime.timedelta(seconds=3)
-
-INSTRUCTIONS = (
-    "Tu es un assistant expert en formation professionnelle continue exclusivement au Luxembourg. "
-    "Utilises en priorité les informations fournies par les sites www.lifelong-learning.lu et www.infpc.lu. "
-    "Réponds de manière claire, précise et utile. "
-    "Ne fournis aucune réponse hors de ton domaine de compétence. "
-    "Si une information est incertaine, indique-le et conseille de vérifier auprès des sources officielles."
-)
 
 SUGGESTIONS_FR = {
     "q1": (
-        ":blue[:material/local_library:] C'est quoi la VAE ?"
+        ":blue[:material/local_library:] Quels salariés sont éligibles au cofinancement ?"
     ),
     "q2": (
-        ":green[:material/database:] Quelles aides pour me former en tant que particulier ?"
+        ":green[:material/database:] Les frais de déplacement sont-ils éligibles ?"
     ),
     "q3": (
-        ":orange[:material/multiline_chart:] Comment devenir organisme de formation ?"
+        ":orange[:material/multiline_chart:] Où trouver les informations sur la masse salariale/ ?"
     ),
     "q4": (
-        ":violet[:material/apparel:] Comment cofinancer les formations de mon entreprise ?"
+        ":violet[:material/apparel:] Quelles pièces justificatives sont obligatoires ?"
     ),
     "q5": (
-        ":red[:material/deployed_code:] Comment obtenir un diplôme ?"
+        ":red[:material/deployed_code:] C'est quoi l'adapatation au poste de travail ?"
     ),
 }
 
 SUGGESTIONS_EN = {
     "q1": (
-        ":blue[:material/local_library:] What is VAE?"
+        ":blue[:material/local_library:] Which employees are eligible for co-financing?"
     ),
     "q2": (
-        ":green[:material/database:] What funding is available to train myself?"
+        ":green[:material/database:] Are travel expenses eligible?"
     ),
     "q3": (
-        ":orange[:material/multiline_chart:] How can I become a training provider?"
+        ":orange[:material/multiline_chart:] Where can I find information on payroll?"
     ),
     "q4": (
-        ":violet[:material/apparel:] How can companies co-finance training?"
+        ":violet[:material/apparel:] Which supporting documents are mandatory?"
     ),
     "q5": (
-        ":red[:material/deployed_code:] How can I obtain a diploma?"
+        ":red[:material/deployed_code:] What is workplace adaptation?"
     ),
 }
 
@@ -71,18 +61,18 @@ SUGGESTIONS_EN = {
 # Translations
 translations = {
     "fr": {
-        "title": "Discutez avec un expert en formation continue", 
+        "title": "Discutez avec un expert en cofinancement", 
         "ask": "Posez votre question",
         "new": "Nouveau Chat",
         "loading": "Veuillez patienter...",
-        "searching": "Je recherche dans la documentation...",
+        "searching": "Je recherche dans mes connaissances...",
         "download": "Télécharger le Chat",
         "disclaimer": "&nbsp;:small[:gray[:material/balance: Avertissement sur l'IA]]",
         "warning": "Avertissement",
         "language": "Choix de la langue"
     },
     "en": {
-        "title": "Ask a lifelong learning expert", 
+        "title": "Ask a cofunding expert", 
         "ask": "Ask your question",
         "new": "New Chat",
         "loading": "Please wait...",
@@ -105,6 +95,12 @@ suggestions = {}
 mistral_api_key = st.secrets["MISTRAL_API_KEY"]
 
 client = Mistral(api_key=mistral_api_key)
+
+# List all libraries in workspace for debug
+libraries_list = client.beta.libraries.list()
+
+for library in libraries_list.data:
+    print(f"Nom: {library.name} | ID: {library.id} ({library.nb_documents} documents)")
 
 # -----------------------------------------------------------------------------
 # Show a disclaimer popup
@@ -219,7 +215,7 @@ sidebar = st.sidebar
 
 with sidebar:
 
-    st.image("./images/lifelong-learning.svg", width=200)
+    st.image("./images/infpc.svg", width=200)
 
     selected_lang = st.sidebar.selectbox(" ", 
         options=["fr", "en"],
@@ -238,7 +234,7 @@ with sidebar:
     ) 
 
 
-st.image("./images/chatbot.svg", width=128, link="https://www.lifelong-learning.lu")
+st.image("./images/chatlib.svg", width=128, link="https://www.infpc.lu")
 
 st.title(
     t["title"],
@@ -317,46 +313,62 @@ if user_message:
 
     # Display assistant response as a speech bubble.
     with st.chat_message("assistant"):
-        with st.spinner(t["loading"]):
-            # Rate-limit the input if needed.
-            question_timestamp = datetime.datetime.now()
-            time_diff = question_timestamp - st.session_state.prev_question_timestamp
-            st.session_state.prev_question_timestamp = question_timestamp
-
-            if time_diff < MIN_TIME_BETWEEN_REQUESTS:
-                time.sleep(time_diff.seconds + time_diff.microseconds * 0.001)
-
-        # Send prompt to LLM.
+        # Create and execute agent
         with st.spinner(t["searching"]):
-            def ask_mistral(messages):
-                context_messages = [
-                    {"role": "system", "content": INSTRUCTIONS},
-                    *messages,
-                ]
+            agent = client.beta.agents.create(
+                model="mistral-large-latest",
+                name="Expert Cofinancement",
+                instructions="Réponds aux questions en te basant uniquement sur la librairie fournie.",
+                tools=[
+                    {
+                    "type": "document_library",
+                    "library_ids": ["019fa84f-323a-7250-b211-ab0283ec1362"]
+                    }
+                ],
+            )
+            print(f"Agent configuré avec succès ! ID de l'agent : {agent.id}")
 
-                stream = client.chat.stream(
-                    model=MODEL,
-                    messages=context_messages,
+            try:
+                response = client.agents.complete(
+                    agent_id=agent.id,
+                    # Send only the last question   
+                    messages=[
+                        {
+                            "role": "user", 
+                            "content": user_message
+                        }
+                    ],     
+                    # Send all previous questions               
+                    #messages=[m for m in st.session_state.messages if m.get("role") == "user"],
                 )
 
-                for chunk in stream:
-                    if chunk.data.choices:
-                        content = chunk.data.choices[0].delta.content
-                        if content:
-                            yield content
+                # 4. Afficher la réponse générée à partir de votre librairie
+                # 4. Parcourir les messages pour extraire le contenu textuel final
+                # L'index 2 contient généralement la réponse textuelle générée après la recherche
+                final_message = response.choices[0].messages[-1]
 
-            response_gen = ask_mistral(st.session_state.messages)
+                if final_message.content:
+                # Reconstruire le texte à partir des TextChunks
+                    full_text = ""
+                    for chunk in final_message.content:
+                        # On ne prend que les morceaux de type texte pur
+                        if chunk.type == "text":
+                            full_text += chunk.text
+                else:
+                    print("L'agent n'a pas renvoyé de texte brut.")
+            finally:
+                client.beta.agents.delete(agent_id=agent.id)
+                print(f"L'agent {agent.id} a été supprimé avec succès.")	
 
         # Put everything after the spinners
         with st.container():
             # Stream the LLM response.
-            response = st.write_stream(response_gen)
+            st.write(full_text)
 
             # Add messages to chat history.
-            st.session_state.messages.append({"role": "assistant", "content": response})
+            st.session_state.messages.append({"role": "assistant", "content": full_text})
             refresh_conversation_export()
 
-            #send_telemetry(question=user_message, response=response)
             st.button(
                 t["new"],
                 icon=":material/refresh:",

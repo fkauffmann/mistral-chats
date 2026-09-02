@@ -38,13 +38,13 @@ SUGGESTIONS_FR = {
         ":green[:material/database:] Les frais de déplacement sont-ils éligibles ?"
     ),
     "q3": (
-        ":orange[:material/multiline_chart:] Où trouver les informations sur la masse salariale/ ?"
+        ":orange[:material/multiline_chart:] Où trouver les informations sur la masse salariale ?"
     ),
     "q4": (
         ":violet[:material/apparel:] Quelles pièces justificatives sont obligatoires ?"
     ),
     "q5": (
-        ":red[:material/deployed_code:] C'est quoi l'adapatation au poste de travail ?"
+        ":red[:material/deployed_code:] Pour quand faut-il rendre ma demande ?"
     ),
 }
 
@@ -62,7 +62,7 @@ SUGGESTIONS_EN = {
         ":violet[:material/apparel:] Which supporting documents are mandatory?"
     ),
     "q5": (
-        ":red[:material/deployed_code:] What is workplace adaptation?"
+        ":red[:material/deployed_code:] What is the duedate for my request for cofunding?"
     ),
 }
 

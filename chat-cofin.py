@@ -15,7 +15,7 @@ from htbuilder import div, styles
 # Configure Streamlit
 
 st.set_page_config(
-    page_title="Chatbot lifelong-learning.lu",
+    page_title="Chatbot Cofinancement",
     page_icon="🤖",
     initial_sidebar_state="collapsed"
 )

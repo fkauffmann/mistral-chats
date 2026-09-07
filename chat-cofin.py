@@ -15,7 +15,7 @@ from htbuilder import div, styles
 # Configure Streamlit
 
 st.set_page_config(
-    page_title="Chatbot lifelong-learning.lu", 
+    page_title="Chatbot lifelong-learning.lu",
     page_icon="🤖",
     initial_sidebar_state="collapsed"
 )
@@ -26,6 +26,10 @@ st.set_page_config(
 MODEL = "mistral-small-latest"
 AGENT_MODEL = "mistral-large-latest"
 LIBRARY_IDS = ["019fa84f-323a-7250-b211-ab0283ec1362"]
+
+INSTRUCTIONS = (
+    "Reponds aux questions en te basant uniquement sur la librairie fournie."
+)
 
 # Nombre maximum de questions par jour et par adresse IP.
 MAX_QUESTIONS_PER_DAY = 20
@@ -329,6 +333,10 @@ def clear_conversation():
     st.session_state.initial_question = None
     st.session_state.selected_suggestion = None
     st.session_state.conversation_export_text = ""
+    # Le conversation_id Mistral est propre a un fil de discussion : on en
+    # redemande un nouveau au prochain message plutot que de reutiliser
+    # l'historique de la conversation precedente.
+    st.session_state.conversation_id = None
 
 def translate_suggestions():
     global suggestions
@@ -372,6 +380,9 @@ def refresh_conversation_export():
 
 if "conversation_export_text" not in st.session_state:
     st.session_state.conversation_export_text = ""
+
+if "conversation_id" not in st.session_state:
+    st.session_state.conversation_id = None
 
 sidebar = st.sidebar
 
@@ -503,77 +514,78 @@ if user_message:
 
     # Display assistant response as a speech bubble.
     with st.chat_message("assistant"):
-        # Create and execute agent
-        # L'agent est cree pour cette question puis supprime dans le `finally`,
-        # y compris si l'appel echoue. `agent` reste a None si la creation
-        # elle-meme echoue, pour ne pas tenter de supprimer un agent inexistant.
-        full_text = ""
-        agent = None
-
+        # Send prompt to Mistral via the Conversations API (document_library
+        # tool).
+        #
+        # L'API Conversations gere l'historique cote serveur via
+        # conversation_id : start_stream cree le fil au premier message,
+        # append_stream l'alimente ensuite, sans avoir a renvoyer tout
+        # l'historique ni a creer/supprimer un agent a chaque question.
         with st.spinner(t["searching"]):
-            try:
-                agent = client.beta.agents.create(
-                    model=AGENT_MODEL,
-                    name="Expert Cofinancement",
-                    instructions=(
-                        "Reponds aux questions en te basant uniquement sur la "
-                        "librairie fournie."
-                    ),
-                    tools=[
-                        {
-                            "type": "document_library",
-                            "library_ids": LIBRARY_IDS,
-                        }
-                    ],
-                )
-                print(f"Agent configure avec succes ! ID de l'agent : {agent.id}")
+            def ask_mistral(message):
+                conversation_id = st.session_state.get("conversation_id")
 
-                response = client.agents.complete(
-                    agent_id=agent.id,
-                    # Send only the last question
-                    messages=[{"role": "user", "content": user_message}],
-                    # Send all previous questions
-                    #messages=[m for m in st.session_state.messages if m.get("role") == "user"],
-                )
+                try:
+                    if conversation_id:
+                        stream = client.beta.conversations.append_stream(
+                            conversation_id=conversation_id,
+                            inputs=message,
+                        )
+                    else:
+                        stream = client.beta.conversations.start_stream(
+                            model=AGENT_MODEL,
+                            instructions=INSTRUCTIONS,
+                            inputs=message,
+                            tools=[
+                                {
+                                    "type": "document_library",
+                                    "library_ids": LIBRARY_IDS,
+                                }
+                            ],
+                        )
 
-                # Reconstruire le texte a partir des TextChunks du dernier message
-                final_message = response.choices[0].messages[-1]
+                    got_content = False
 
-                if final_message.content:
-                    for chunk in final_message.content:
-                        # On ne prend que les morceaux de type texte pur
-                        if chunk.type == "text":
-                            full_text += chunk.text
-                else:
-                    print("L'agent n'a pas renvoye de texte brut.")
+                    for event in stream:
+                        data = event.data
+                        event_type = getattr(data, "type", None)
 
-            except Exception as exc:
-                print(f"Erreur lors de l'appel a l'agent : {exc}")
+                        if event_type == "conversation.response.started":
+                            st.session_state.conversation_id = data.conversation_id
 
-            finally:
-                if agent is not None:
-                    try:
-                        client.beta.agents.delete(agent_id=agent.id)
-                        print(f"L'agent {agent.id} a ete supprime avec succes.")
-                    except Exception as exc:
-                        # Un echec de suppression ne doit pas casser la page ni
-                        # masquer l'erreur d'origine.
-                        print(f"Suppression de l'agent {agent.id} impossible : {exc}")
+                        elif event_type == "message.output.delta":
+                            content = data.content
+                            if isinstance(content, str):
+                                got_content = True
+                                yield content
+                            elif isinstance(content, list):
+                                # Le contenu peut melanger texte et citations ;
+                                # on ne garde que les morceaux de texte pur.
+                                for chunk in content:
+                                    if getattr(chunk, "type", None) == "text":
+                                        got_content = True
+                                        yield chunk.text
 
-        if not full_text:
-            full_text = (
-                "Desole, je n'ai pas pu obtenir de reponse. Merci de reessayer."
-                if st.session_state.lang == "fr"
-                else "Sorry, I could not get an answer. Please try again."
-            )
+                    if not got_content:
+                        raise RuntimeError("Reponse vide")
+
+                except Exception as exc:
+                    print(f"Erreur lors de l'appel a la conversation Mistral : {exc}")
+                    yield (
+                        "Desole, je n'ai pas pu obtenir de reponse. Merci de reessayer."
+                        if st.session_state.lang == "fr"
+                        else "Sorry, I could not get an answer. Please try again."
+                    )
+
+            response_gen = ask_mistral(user_message)
 
         # Put everything after the spinners
         with st.container():
             # Stream the LLM response.
-            st.write(full_text)
+            response = st.write_stream(response_gen)
 
             # Add messages to chat history.
-            st.session_state.messages.append({"role": "assistant", "content": full_text})
+            st.session_state.messages.append({"role": "assistant", "content": response})
             refresh_conversation_export()
 
             st.button(

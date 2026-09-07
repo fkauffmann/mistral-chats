@@ -11,6 +11,11 @@ from mistralai.client import Mistral
 from htbuilder.units import rem
 from htbuilder import div, styles
 
+
+def is_valid_ip(ip: str) -> bool:
+    """Validate IPv4 address format."""
+    return bool(re.match(r'^(\d{1,3}\.){3}\d{1,3}$', ip))
+
 # -----------------------------------------------------------------------------
 # Configure Streamlit
 
@@ -192,11 +197,15 @@ def get_client_ip() -> str:
     forwarded = headers.get("X-Forwarded-For") or headers.get("x-forwarded-for")
     if forwarded:
         # X-Forwarded-For: <client>, <proxy1>, <proxy2>
-        return forwarded.split(",")[0].strip()
+        ip = forwarded.split(",")[0].strip()
+        if is_valid_ip(ip):
+            return ip
 
     real_ip = headers.get("X-Real-Ip") or headers.get("x-real-ip")
     if real_ip:
-        return real_ip.strip()
+        real_ip = real_ip.strip()
+        if is_valid_ip(real_ip):
+            return real_ip
 
     if "fallback_client_id" not in st.session_state:
         st.session_state.fallback_client_id = f"session-{uuid.uuid4()}"

@@ -1,3 +1,8 @@
 chat_with_pdfs.py
 querylib.py
 scratchpad.txt
+
+# Database files
+*.db
+*.db-shm
+*.db-wal

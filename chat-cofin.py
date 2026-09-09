@@ -320,6 +320,15 @@ def show_disclaimer_dialog():
             """)
 
 # ----------------------------------------------------------------------------
+# Get avatar path based on role
+def get_avatar(role: str) -> str:
+    """Return the avatar image path based on the message role."""
+    if role == "assistant":
+        return "./images/avatar-bot.png"
+    return "./images/avatar-user.png"
+
+
+# ----------------------------------------------------------------------------
 # Remove Streamlit Markdown
 def remove_streamlit_markdown(text: str) -> str:
 
@@ -448,7 +457,7 @@ if not user_first_interaction and not has_message_history:
 
     # Quota deja epuise : on n'affiche meme pas le champ de saisie.
     if remaining_questions(client_ip) <= 0:
-        with st.chat_message("assistant"):
+        with st.chat_message("assistant", avatar=get_avatar("assistant")):
             st.warning(t["quota_reached"].format(limit=MAX_QUESTIONS_PER_DAY))
         st.stop()
 
@@ -484,7 +493,7 @@ if "prev_question_timestamp" not in st.session_state:
 
 # Display chat messages from history as speech bubbles.
 for i, message in enumerate(st.session_state.messages):
-    with st.chat_message(message["role"]):
+    with st.chat_message(message["role"], avatar=get_avatar(message["role"])):
         if message["role"] == "assistant":
             st.container()  # Fix ghost message bug.
 
@@ -497,10 +506,10 @@ if user_message:
     allowed, _ = consume_question(client_ip)
 
     if not allowed:
-        with st.chat_message("user"):
+        with st.chat_message("user", avatar=get_avatar("user")):
             st.text(user_message)
 
-        with st.chat_message("assistant"):
+        with st.chat_message("assistant", avatar=get_avatar("assistant")):
             st.container()  # Fix ghost message bug.
             st.warning(t["quota_reached"].format(limit=MAX_QUESTIONS_PER_DAY))
 
@@ -516,13 +525,13 @@ if user_message:
     )
 
     # Display message as a speech bubble.
-    with st.chat_message("user"):
+    with st.chat_message("user", avatar=get_avatar("user")):
         st.text(user_message)
 
     refresh_conversation_export()
 
     # Display assistant response as a speech bubble.
-    with st.chat_message("assistant"):
+    with st.chat_message("assistant", avatar=get_avatar("assistant")):
         # Send prompt to Mistral via the Conversations API (document_library
         # tool).
         #

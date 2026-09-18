@@ -1,3 +1,4 @@
 streamlit
 mistralai
 htbuilder
+markdown

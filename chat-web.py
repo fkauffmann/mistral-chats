@@ -1,4 +1,5 @@
 import datetime
+import markdown
 import time
 import re
 import sqlite3
@@ -369,25 +370,31 @@ def translate_suggestions():
 # Export the current conversation into a string
 
 def build_conversation_text():
-    messages = st.session_state.get("messages", [])
-    lines = []
+    content = "# Rechercher avec l'IA - Chatbot lifelong-learning.lu\n\n"
+    for m in st.session_state.messages:
+        if m["role"] == "user":
+            content += f"## Question:\n\n{m['content']}\n\n"
+        if m["role"] == "assistant":
+            content += f"## Réponse:\n\n{m['content']}\n\n"
 
-    for message in messages:
-        role = message.get("role", "")
-        content = (message.get("content") or "").strip()
-
-        if not content:
-            continue
-
-        if role == "user":
-            lines.append(f"Question: {content}")
-        elif role == "assistant":
-            lines.append(f"Réponse: {content}")
-        else:
-            lines.append(f"{role.capitalize()}: {content}")
-
-    return "\n\n".join(lines)
-
+    body = markdown.markdown(content, extensions=["tables"])
+    return f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Rechercher avec l'IA - Chatbot lifelong-learning.lu</title>
+<style>
+html {{ font-family: Arial, sans-serif; line-height: 1.6; }}
+table {{ border-collapse: collapse; }}
+th, td {{ border: 1px solid #ccc; padding: 4px 8px; text-align: left; }}
+a {{ color: #ff6e00; text-decoration: none; }}
+</style>
+</head>
+<body>
+{body}
+</body>
+</html>
+"""
 
 def refresh_conversation_export():
     st.session_state.conversation_export_text = build_conversation_text()
@@ -625,8 +632,8 @@ with sidebar:
     st.download_button(
         label=t["download"],
         data=st.session_state.conversation_export_text,
-        file_name=f"chat_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.txt",
-        mime="text/plain",
+        file_name=f"chat_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.htm",
+        mime="text/html",
         disabled=not st.session_state.conversation_export_text,
         width="stretch",
     )

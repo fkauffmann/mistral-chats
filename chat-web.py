@@ -1,3 +1,16 @@
+# -----------------------------------------------------------------------------
+# Chatbot Cofinancement
+#
+# Basé sur Mistral, ce chatbot répond aux questions sur la formation 
+# professionnelle continue au Luxembourg, en utilisant les informations 
+# des sites www.lifelong-learning.lu et www.infpc.lu.
+#
+# L'accès en temps réel se fait via un appel au tool web_search de Mistral,
+#  qui interroge les sites officiels et fournit les résultats au LLM.
+#
+# Historique des versions :
+# 2024-06-10 : v1.0.0 : première version
+# -----------------------------------------------------------------------------
 import datetime
 import markdown
 import time
@@ -19,7 +32,7 @@ from htbuilder import div, styles
 st.set_page_config(
     page_title="Chatbot lifelong-learning.lu", 
     page_icon="🤖",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="auto"
 )
 
 # -----------------------------------------------------------------------------
@@ -35,7 +48,7 @@ MAX_QUESTIONS_PER_DAY = 20
 INSTRUCTIONS = (
     "Tu es un assistant expert en formation professionnelle continue exclusivement au Luxembourg. "
     "Utilises en priorité les informations fournies par les sites www.lifelong-learning.lu et www.infpc.lu. "
-    "Réponds de manière claire, précise et utile. "
+    "Réponds de manière claire, précise et utile dans la langue de la question. "
     "Ne fournis aucune réponse hors de ton domaine de compétence. "
     "Si une information est incertaine, indique-le et conseille de vérifier auprès des sources officielles."
 )
@@ -325,8 +338,8 @@ def show_disclaimer_dialog():
 def get_avatar(role: str) -> str:
     """Return the avatar image path based on the message role."""
     if role == "assistant":
-        return "./images/avatar-bot.png"
-    return "./images/avatar-user.png"
+        return "./images/avatar-bot-orange.png"
+    return "./images/avatar-user-orange.png"
 
 
 # ----------------------------------------------------------------------------

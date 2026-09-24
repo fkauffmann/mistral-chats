@@ -1,3 +1,16 @@
+# -----------------------------------------------------------------------------
+# Chatbot Cofinancement
+#
+# Basé sur Mistral, ce chatbot répond aux questions sur le cofinancement
+# en se basant uniquement sur la librairie "FAQ pour expert cofinancement"
+#
+# Pour gérer la librairie, se connecter dans Mistral Studio et aller dans 
+# "Document Libraries" > "FAQ pour expert cofinancement".
+# https://console.mistral.ai/libraries/019fa84f-323a-7250-b211-ab0283ec1362
+#
+# Historique des versions :
+# 2024-06-10 : v1.0.0 : première version
+# -----------------------------------------------------------------------------
 import datetime
 import markdown
 import re
@@ -12,18 +25,13 @@ from mistralai.client import Mistral
 from htbuilder.units import rem
 from htbuilder import div, styles
 
-
-def is_valid_ip(ip: str) -> bool:
-    """Validate IPv4 address format."""
-    return bool(re.match(r'^(\d{1,3}\.){3}\d{1,3}$', ip))
-
 # -----------------------------------------------------------------------------
 # Configure Streamlit
 
 st.set_page_config(
     page_title="Chatbot Cofinancement",
     page_icon="🤖",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="auto"
 )
 
 # -----------------------------------------------------------------------------
@@ -34,7 +42,11 @@ AGENT_MODEL = "mistral-large-latest"
 LIBRARY_IDS = ["019fa84f-323a-7250-b211-ab0283ec1362"]
 
 INSTRUCTIONS = (
-    "Reponds aux questions en te basant uniquement sur la librairie fournie."
+"Réponds aux questions en te basant uniquement sur la librairie fournie. "
+"Réponds dans la langue de la question (français ou anglais)."
+"Si la librairie ne contient pas la réponse, invite à contacter l'INFPC au +352 26 20 40. "
+"Ne pas inventer de réponses. "
+"Ne pas donner de conseils juridiques ou financiers."
 )
 
 # Nombre maximum de questions par jour et par adresse IP.
@@ -119,8 +131,18 @@ translations = {
 if "lang" not in st.session_state:
     st.session_state.lang = "fr" 
 
+# -----------------------------------------------------------------------------
+# Valide le format d'une adresse IPv4. On ne fait pas de validation sur les
+# octets (0-255) : ce n'est pas critique, et ca evite de se prendre la tete 
+# avec les adresses IPv6.
+def is_valid_ip(ip: str) -> bool:
+    """Validate IPv4 address format."""
+    return bool(re.match(r'^(\d{1,3}\.){3}\d{1,3}$', ip))
 
+# -----------------------------------------------------------------------------
+# Dictionnaire des suggestions de questions, traduit selon la langue choisie.
 suggestions = {}
+
 
 # -----------------------------------------------------------------------------
 # Create a new MISTRAL client
@@ -325,8 +347,8 @@ def show_disclaimer_dialog():
 def get_avatar(role: str) -> str:
     """Return the avatar image path based on the message role."""
     if role == "assistant":
-        return "./images/avatar-bot.png"
-    return "./images/avatar-user.png"
+        return "./images/avatar-bot-blue.png"
+    return "./images/avatar-user-blue.png"
 
 
 # ----------------------------------------------------------------------------

@@ -128,7 +128,7 @@ stateDiagram-v2
 | Code | Règle |
 |---|---|
 | RG1 | Un visiteur peut poser au maximum **20 questions par jour calendaire** (date du serveur). |
-| RG2 | Le visiteur est identifié par son **adresse IPv4** transmise par le reverse proxy ; à défaut, par un identifiant de session aléatoire. |
+| RG2 | Le visiteur est identifié par son **adresse IPv4** transmise par le reverse proxy ; à défaut, par un identifiant de session aléatoire. Cet identifiant n'est jamais stocké en clair : seule son empreinte HMAC-SHA256 (clé `IP_HASH_KEY`) est enregistrée. |
 | RG3 | Seule la soumission effective d'une question consomme le quota (pas les changements de langue, clics sur boutons, rafraîchissements d'écran). |
 | RG4 | Une question refusée pour quota n'est **ni envoyée au modèle, ni enregistrée** dans l'historique. |
 | RG5 | Si la page d'accueil est affichée alors que le quota est épuisé, le champ de saisie n'est pas proposé : seul le message de quota apparaît. |
@@ -151,7 +151,7 @@ flowchart LR
     S -- "SQL (sqlite3)" --> D[("quota-cofin.db<br/>table quota")]
     S -- "HTTPS / SSE<br/>SDK mistralai" --> M["API Mistral<br/>Conversations"]
     M -- "outil document_library" --> L[("Librairie<br/>FAQ pour expert cofinancement")]
-    S -. lit .-> SEC[".streamlit/secrets.toml<br/>MISTRAL_API_KEY"]
+    S -. lit .-> SEC[".streamlit/secrets.toml<br/>MISTRAL_API_KEY, IP_HASH_KEY"]
     S -. sert .-> IMG["images/*.svg, *.png"]
 ```
 
@@ -405,25 +405,41 @@ l'identifiant de session.
 
 ### 3.7 Export de la conversation
 
-`build_conversation_text()` construit un Markdown :
-
-```text
-# Rechercher avec l'IA - Chatbot lifelong-learning.lu
-## Question:
-<question>
-## Réponse:
-<réponse>
-…
-```
-
-puis le convertit en HTML (`markdown.markdown(..., extensions=["tables"])`) et
-l'enveloppe dans une page autonome (`lang="fr"`, UTF-8, CSS inline : police
+`build_conversation_text()` produit, sous le titre « Rechercher avec l'IA -
+Chatbot lifelong-learning.lu », une suite de blocs « Question: » / « Réponse: ».
+Chaque message est converti séparément en HTML
+(`markdown.markdown(..., extensions=["tables"])`), chaque réponse étant placée
+dans une `<section>` marquée IA (voir ci-dessous). Le tout est enveloppé dans une page autonome (`lang="fr"`, UTF-8, CSS inline : police
 Arial, bordures de tableaux, liens orange `#ff6e00`).
 
 `refresh_conversation_export()` régénère ce texte après chaque question et
 chaque réponse ; le bouton `st.download_button` de la barre latérale propose le
 fichier `chat_AAAAMMJJ_HHMM.htm` (`text/html`), désactivé tant que la
 conversation est vide.
+
+#### Marquage IA (art. 50, § 2 AI Act)
+
+Les réponses générées sont marquées comme telles, de façon visible et lisible
+par machine :
+
+- **En session**, chaque réponse de l'assistant porte les champs
+  `ai_generated: True`, `model` (`AGENT_MODEL`) et `generated_at`
+  (horodatage ISO 8601 avec fuseau).
+- **Dans l'interface**, une mention « Réponse générée par IA » / « AI-generated
+  answer » (`translations[...]["ai_label"]`) s'affiche sous chaque réponse.
+- **Dans le fichier exporté** :
+  - `<head>` : `<meta name="generator">` (modèle utilisé),
+    `<meta name="ai-generated" content="true">` et
+    `<meta name="digital-source-type">` avec la valeur IPTC
+    `trainedAlgorithmicMedia` ;
+  - chaque réponse (et elle seule) est enveloppée dans
+    `<section class="ai-generated" data-ai-generated="true" data-model="…"
+    data-generated-at="…">` avec le libellé visible « Réponse générée par IA
+    (Mistral) » ;
+  - un pied de page rappelle que les réponses ont été générées par un système d'IA.
+
+Limite : ces métadonnées ne survivent pas à un copier-coller du texte. Un
+filigrane robuste d'un texte brut ne peut pas être ajouté côté application.
 
 ### 3.8 Nettoyage des suggestions
 
@@ -464,7 +480,7 @@ mistral-chats/
 ├── quota-cofin.db           # créée à l'exécution (ignorée par git : *.db)
 ├── .streamlit/
 │   ├── config.toml          # configuration serveur / thème
-│   └── secrets.toml         # MISTRAL_API_KEY (ignoré par git)
+│   └── secrets.toml         # MISTRAL_API_KEY, IP_HASH_KEY (ignoré par git)
 └── images/
     ├── infpc.svg, chatlib.svg
     └── avatar-bot-blue.png, avatar-user-blue.png
@@ -484,6 +500,7 @@ pip install -r requirements.txt
 
 ```toml
 MISTRAL_API_KEY = "…"
+IP_HASH_KEY = "…"   # clé secrète de hachage des adresses IP
 ```
 
 `.streamlit/config.toml` (valeurs actuelles) :

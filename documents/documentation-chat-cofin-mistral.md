@@ -436,8 +436,9 @@ Chaîne de traitement :
 st.session_state.messages
         │  build_conversation_text()
         ▼
-Markdown interpolé ("## Question:" / "## Réponse:" par message)
-        │  markdown.markdown(extensions=["tables"])
+Pour chaque message : markdown.markdown(extensions=["tables"])
+(réponses enveloppées dans <section class="ai-generated" …>)
+        │
         ▼
 HTML du corps
         │  habillage dans un gabarit complet
@@ -460,6 +461,30 @@ chat_YYYYMMDD_HHMM.htm
   lifelong-learning.lu » (intitulé historique, repris tel quel du script).
 - Après un refus de quota, l'export reste disponible : c'est la raison pour
   laquelle le script neutralise `user_message` au lieu d'appeler `st.stop()`.
+
+#### Marquage IA (art. 50, § 2 AI Act)
+
+Les réponses générées sont marquées comme telles, de façon visible et lisible
+par machine :
+
+- **En session**, chaque réponse de l'assistant porte les champs
+  `ai_generated: True`, `model` (`AGENT_MODEL`) et `generated_at`
+  (horodatage ISO 8601 avec fuseau).
+- **Dans l'interface**, une mention « Réponse générée par IA » / « AI-generated
+  answer » (`translations[...]["ai_label"]`) s'affiche sous chaque réponse.
+- **Dans le fichier exporté** :
+  - `<head>` : `<meta name="generator">` (modèle utilisé),
+    `<meta name="ai-generated" content="true">` et
+    `<meta name="digital-source-type">` avec la valeur IPTC
+    `trainedAlgorithmicMedia` ;
+  - chaque réponse (et elle seule) est enveloppée dans
+    `<section class="ai-generated" data-ai-generated="true" data-model="…"
+    data-generated-at="…">` avec le libellé visible « Réponse générée par IA
+    (Mistral) » ;
+  - un pied de page rappelle que les réponses ont été générées par un système d'IA.
+
+Limite : ces métadonnées ne survivent pas à un copier-coller du texte. Un
+filigrane robuste d'un texte brut ne peut pas être ajouté côté application.
 
 ### 3.8 Nettoyage du Markdown Streamlit
 
@@ -520,6 +545,7 @@ Streamlit :
 
   ```toml
   MISTRAL_API_KEY = "..."
+  IP_HASH_KEY = "..."   # clé HMAC pour hacher les adresses IP du quota
   ```
 
 - ou variables d'environnement équivalentes selon le mécanisme

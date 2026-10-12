@@ -12,6 +12,9 @@
 # 2024-06-10 : v1.0.0 : première version
 # -----------------------------------------------------------------------------
 import datetime
+import hashlib
+import hmac
+import html
 import markdown
 import time
 import re
@@ -110,6 +113,7 @@ translations = {
             "ou [www.infpc.lu](https://www.infpc.lu)."
         ),
         "quota_remaining": "Questions restantes aujourd'hui : {remaining} / {limit}",
+        "ai_label": ":material/smart_toy: Réponse générée par IA",
     },
     "en": {
         "title": "Ask a lifelong learning expert", 
@@ -129,6 +133,7 @@ translations = {
             "or [www.infpc.lu](https://www.infpc.lu)."
         ),
         "quota_remaining": "Questions left today: {remaining} / {limit}",
+        "ai_label": ":material/smart_toy: AI-generated answer",
     }
 }
 if "lang" not in st.session_state:
@@ -225,6 +230,16 @@ def get_client_ip() -> str:
     if "fallback_client_id" not in st.session_state:
         st.session_state.fallback_client_id = f"session-{uuid.uuid4()}"
     return st.session_state.fallback_client_id
+
+
+def hash_client_id(client_id: str) -> str:
+    """Empreinte HMAC-SHA256 de l'identifiant client (adresse IP).
+
+    On ne stocke jamais l'adresse IP en clair : seule son empreinte, calculee
+    avec la cle secrete IP_HASH_KEY de secrets.toml, est enregistree en base.
+    """
+    key = st.secrets["IP_HASH_KEY"].encode("utf-8")
+    return hmac.new(key, client_id.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 def _purge_old_days(store: dict, today: str) -> None:
@@ -392,29 +407,49 @@ def translate_suggestions():
 # -----------------------------------------------------------------------------
 # Export the current conversation into a string
 
+#
+# Marquage IA (art. 50, § 2 AI Act) : le fichier exporte porte des metadonnees
+# lisibles par machine (<meta> dans le <head>, attributs data-* sur chaque
+# reponse) ainsi qu'un libelle visible. Seules les reponses sont marquees, pas
+# les questions de l'utilisateur.
+
 def build_conversation_text():
-    content = "# Rechercher avec l'IA - Chatbot lifelong-learning.lu\n\n"
+    body = "<h1>Rechercher avec l'IA - Chatbot lifelong-learning.lu</h1>\n"
     for m in st.session_state.messages:
         if m["role"] == "user":
-            content += f"## Question:\n\n{m['content']}\n\n"
+            body += "<h2>Question:</h2>\n"
+            body += markdown.markdown(m["content"], extensions=["tables"]) + "\n"
         if m["role"] == "assistant":
-            content += f"## Réponse:\n\n{m['content']}\n\n"
+            model = html.escape(m.get("model", AGENT_MODEL))
+            generated_at = html.escape(m.get("generated_at", ""))
+            body += (
+                f'<section class="ai-generated" data-ai-generated="true" '
+                f'data-model="{model}" data-generated-at="{generated_at}">\n'
+                "<h2>Réponse:</h2>\n"
+                '<p class="ai-label">Réponse générée par IA (Mistral)</p>\n'
+                + markdown.markdown(m["content"], extensions=["tables"])
+                + "\n</section>\n"
+            )
 
-    body = markdown.markdown(content, extensions=["tables"])
     return f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="utf-8">
+<meta name="generator" content="Chatbot INFPC - Mistral {html.escape(AGENT_MODEL)}">
+<meta name="ai-generated" content="true">
+<meta name="digital-source-type" content="http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia">
 <title>Rechercher avec l'IA - Chatbot lifelong-learning.lu</title>
 <style>
 html {{ font-family: Arial, sans-serif; line-height: 1.6; }}
 table {{ border-collapse: collapse; }}
 th, td {{ border: 1px solid #ccc; padding: 4px 8px; text-align: left; }}
 a {{ color: #ff6e00; text-decoration: none; }}
+.ai-label, footer {{ color: #777; font-size: 0.85em; font-style: italic; }}
 </style>
 </head>
 <body>
 {body}
+<footer>Les réponses de ce document ont été générées par un système d'intelligence artificielle.</footer>
 </body>
 </html>
 """
@@ -463,7 +498,7 @@ st.title(
 )
 
 # Identifiant utilisé pour le quota journalier.
-client_ip = get_client_ip()
+client_ip = hash_client_id(get_client_ip())
 
 user_just_asked_initial_question = (
     "initial_question" in st.session_state and st.session_state.initial_question
@@ -528,6 +563,9 @@ for i, message in enumerate(st.session_state.messages):
             st.container()  # Fix ghost message bug.
 
         st.markdown(message["content"])
+
+        if message.get("ai_generated"):
+            st.caption(t["ai_label"])
 
 if user_message:
     # Décompte du quota journalier. C'est le SEUL endroit où l'on incrémente :
@@ -639,8 +677,17 @@ if user_message:
             # Stream the LLM response.
             response = st.write_stream(response_gen)
 
-            # Add messages to chat history.
-            st.session_state.messages.append({"role": "assistant", "content": response})
+            st.caption(t["ai_label"])
+
+            # Add messages to chat history, avec les metadonnees de marquage IA
+            # (art. 50, § 2 AI Act) reprises dans l'export HTML.
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": response,
+                "ai_generated": True,
+                "model": AGENT_MODEL,
+                "generated_at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+            })
             refresh_conversation_export()
 
             #send_telemetry(question=user_message, response=response)

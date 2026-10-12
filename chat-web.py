@@ -368,6 +368,16 @@ def clear_conversation():
     # Le conversation_id Mistral est propre a un fil de discussion : on en
     # redemande un nouveau au prochain message plutot que de reutiliser
     # l'historique de la conversation precedente.
+    #
+    # La conversation est stockee cote Mistral : on la supprime explicitement
+    # pour ne pas y laisser les questions et reponses. Un echec (reseau, ID
+    # deja supprime...) ne doit pas empecher l'utilisateur de recommencer.
+    conversation_id = st.session_state.get("conversation_id")
+    if conversation_id:
+        try:
+            client.beta.conversations.delete(conversation_id=conversation_id)
+        except Exception as exc:
+            print(f"Erreur lors de la suppression de la conversation Mistral {conversation_id} : {exc}")
     st.session_state.conversation_id = None
 
 def translate_suggestions():
